@@ -50,6 +50,9 @@
                  result to valid color values. Saturate(S + D) -->
             <enum name="add" value="16" />
         </attr>
+        <!-- Indicates if the drawable needs to be mirrored when its layout direction is
+             RTL (right-to-left). -->
+        <attr name="autoMirrored" format="boolean" />
         <!-- The intrinsic width of the Vector Drawable. -->
         <attr name="width" format="dimension"/>
         <!-- The intrinsic height of the Vector Drawable. -->
@@ -63,6 +66,18 @@
         <!-- The opacity of the whole vector drawable, as a value between 0
              (completely transparent) and 1 (completely opaque). -->
         <attr name="alpha" format="float"/>
+        <!-- Left optical inset.
+             Until optical insets are fully supported. -->
+        <attr name="opticalInsetLeft" format="dimension" />
+        <!-- Top optical inset.
+             Until optical insets are fully supported. -->
+        <attr name="opticalInsetTop" format="dimension" />
+        <!-- Right optical inset.
+             Until optical insets are fully supported. -->
+        <attr name="opticalInsetRight" format="dimension" />
+        <!-- Bottom optical inset.
+             Until optical insets are fully supported. -->
+        <attr name="opticalInsetBottom" format="dimension" />
 
         <attr name="allowCaching" format="boolean"/>
     </declare-styleable>

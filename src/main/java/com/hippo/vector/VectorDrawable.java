@@ -1,17 +1,15 @@
 /*
- * Copyright 2015 Hippo Seven
+ * Copyright (C) 2014 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
  */
 
 package com.hippo.vector;
@@ -33,13 +31,18 @@ import android.graphics.PorterDuff.Mode;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.Rect;
 import android.graphics.RectF;
-import android.graphics.Region;
 import android.graphics.drawable.Drawable;
+import android.os.Build;
 import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 import android.support.v4.util.ArrayMap;
 import android.util.AttributeSet;
+import android.util.DisplayMetrics;
+import android.util.LayoutDirection;
 import android.util.Log;
 import android.util.Xml;
+
+import com.hippo.yorozuya.MathUtils;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
@@ -56,21 +59,21 @@ import java.util.Stack;
  * <p/>
  * <dt><code>&lt;vector></code></dt>
  * <dl>
- * <dd>Used to defined a vector drawable
+ * <dd>Used to define a vector drawable
  * <dl>
  * <dt><code>android:name</code></dt>
  * <dd>Defines the name of this vector drawable.</dd>
  * <dt><code>android:width</code></dt>
- * <dd>Used to defined the intrinsic width of the drawable.
+ * <dd>Used to define the intrinsic width of the drawable.
  * This support all the dimension units, normally specified with dp.</dd>
  * <dt><code>android:height</code></dt>
- * <dd>Used to defined the intrinsic height the drawable.
+ * <dd>Used to define the intrinsic height the drawable.
  * This support all the dimension units, normally specified with dp.</dd>
  * <dt><code>android:viewportWidth</code></dt>
- * <dd>Used to defined the width of the viewport space. Viewport is basically
+ * <dd>Used to define the width of the viewport space. Viewport is basically
  * the virtual canvas where the paths are drawn on.</dd>
  * <dt><code>android:viewportHeight</code></dt>
- * <dd>Used to defined the height of the viewport space. Viewport is basically
+ * <dd>Used to define the height of the viewport space. Viewport is basically
  * the virtual canvas where the paths are drawn on.</dd>
  * <dt><code>android:tint</code></dt>
  * <dd>The color to apply to the drawable as a tint. By default, no tint is applied.</dd>
@@ -120,7 +123,7 @@ import java.util.Stack;
  * <dt><code>android:name</code></dt>
  * <dd>Defines the name of the path.</dd>
  * <dt><code>android:pathData</code></dt>
- * <dd>Defines path string. This is using exactly same format as "d" attribute
+ * <dd>Defines path data using exactly same format as "d" attribute
  * in the SVG's path data. This is defined in the viewport space.</dd>
  * <dt><code>android:fillColor</code></dt>
  * <dd>Defines the color to fill the path (none if not present).</dd>
@@ -150,12 +153,13 @@ import java.util.Stack;
  *
  * <dl>
  * <dt><code>&lt;clip-path></code></dt>
- * <dd>Defines path to be the current clip.
+ * <dd>Defines path to be the current clip. Note that the clip path only apply to
+ * the current group and its children.
  * <dl>
  * <dt><code>android:name</code></dt>
  * <dd>Defines the name of the clip path.</dd>
  * <dt><code>android:pathData</code></dt>
- * <dd>Defines clip path string. This is using exactly same format as "d" attribute
+ * <dd>Defines clip path using the same format as "d" attribute
  * in the SVG's path data.</dd>
  * </dl></dd>
  * </dl>
@@ -198,6 +202,11 @@ public class VectorDrawable extends Drawable {
     private static final int LINEJOIN_ROUND = 1;
     private static final int LINEJOIN_BEVEL = 2;
 
+    // Cap the bitmap size, such that it won't hurt the performance too much
+    // and it won't crash due to a very large scale.
+    // The drawable will look blurry above this size.
+    private static final int MAX_CACHED_BITMAP_SIZE = 2048;
+
     private static final boolean DBG_VECTOR_DRAWABLE = false;
 
     private VectorDrawableState mVectorState;
@@ -211,13 +220,29 @@ public class VectorDrawable extends Drawable {
     // caching the bitmap by default is allowed.
     private boolean mAllowCaching = true;
 
+    // Given the virtual display setup, the dpi can be different than the inflation's dpi.
+    // Therefore, we need to scale the values we got from the getDimension*().
+    private int mDpiScaledWidth = 0;
+    private int mDpiScaledHeight = 0;
+    private Insets mDpiScaleInsets = Insets.NONE;
+
+    // Temp variable, only for saving "new" operation at the draw() time.
+    private final float[] mTmpFloats = new float[9];
+    private final Matrix mTmpMatrix = new Matrix();
+    private final Rect mTmpBounds = new Rect();
+
     public VectorDrawable() {
-        mVectorState = new VectorDrawableState();
+        this(null, null);
     }
 
-    private VectorDrawable(@NonNull VectorDrawableState state) {
-        mVectorState = state;
-        mTintFilter = Utils.updateTintFilter(this, mTintFilter, state.mTint, state.mTintMode);
+    private VectorDrawable(VectorDrawableState state, @Nullable Resources res) {
+        if (state == null) {
+            mVectorState = new VectorDrawableState();
+        } else {
+            mVectorState = state;
+            mTintFilter = Utils.updateTintFilter(this, mTintFilter, state.mTint, state.mTintMode);
+        }
+        updateDimensionInfo(res, false);
     }
 
     @Override
@@ -240,40 +265,60 @@ public class VectorDrawable extends Drawable {
     }
 
     @Override
-    public void draw(@NonNull Canvas canvas) {
-        final Rect bounds = getBounds();
-        if (bounds.width() == 0 || bounds.height() == 0) {
-            // too small to draw
+    public void draw(Canvas canvas) {
+        // We will offset the bounds for drawBitmap, so copyBounds() here instead
+        // of getBounds().
+        copyBounds(mTmpBounds);
+        if (mTmpBounds.width() <= 0 || mTmpBounds.height() <= 0) {
+            // Nothing to draw
+            return;
+        }
+
+        // Color filters always override tint filters.
+        final ColorFilter colorFilter = (mColorFilter == null ? mTintFilter : mColorFilter);
+
+        // The imageView can scale the canvas in different ways, in order to
+        // avoid blurry scaling, we have to draw into a bitmap with exact pixel
+        // size first. This bitmap size is determined by the bounds and the
+        // canvas scale.
+        canvas.getMatrix(mTmpMatrix);
+        mTmpMatrix.getValues(mTmpFloats);
+        float canvasScaleX = Math.abs(mTmpFloats[Matrix.MSCALE_X]);
+        float canvasScaleY = Math.abs(mTmpFloats[Matrix.MSCALE_Y]);
+        int scaledWidth = (int) (mTmpBounds.width() * canvasScaleX);
+        int scaledHeight = (int) (mTmpBounds.height() * canvasScaleY);
+        scaledWidth = Math.min(MAX_CACHED_BITMAP_SIZE, scaledWidth);
+        scaledHeight = Math.min(MAX_CACHED_BITMAP_SIZE, scaledHeight);
+
+        if (scaledWidth <= 0 || scaledHeight <= 0) {
             return;
         }
 
         final int saveCount = canvas.save();
+        canvas.translate(mTmpBounds.left, mTmpBounds.top);
 
-        canvas.translate(bounds.left, bounds.top);
-
-        // Color filters always override tint filters.
-        final ColorFilter colorFilter = mColorFilter == null ? mTintFilter : mColorFilter;
-
-        if (!mAllowCaching) {
-            // AnimatedVectorDrawable
-            if (!mVectorState.hasTranslucentRoot()) {
-                mVectorState.mVPathRenderer.draw(
-                        canvas, bounds.width(), bounds.height(), colorFilter);
-            } else {
-                mVectorState.createCachedBitmapIfNeeded(bounds);
-                mVectorState.updateCachedBitmap(bounds);
-                mVectorState.drawCachedBitmapWithRootAlpha(canvas, colorFilter);
-            }
-        } else {
-            // Static Vector Drawable case.
-            mVectorState.createCachedBitmapIfNeeded(bounds);
-            if (!mVectorState.canReuseCache()) {
-                mVectorState.updateCachedBitmap(bounds);
-                mVectorState.updateCacheStates();
-            }
-            mVectorState.drawCachedBitmapWithRootAlpha(canvas, colorFilter);
+        // Handle RTL mirroring.
+        final boolean needMirroring = needMirroring();
+        if (needMirroring) {
+            canvas.translate(mTmpBounds.width(), 0);
+            canvas.scale(-1.0f, 1.0f);
         }
 
+        // At this point, canvas has been translated to the right position.
+        // And we use this bound for the destination rect for the drawBitmap, so
+        // we offset to (0, 0);
+        mTmpBounds.offsetTo(0, 0);
+
+        mVectorState.createCachedBitmapIfNeeded(scaledWidth, scaledHeight);
+        if (!mAllowCaching) {
+            mVectorState.updateCachedBitmap(scaledWidth, scaledHeight);
+        } else {
+            if (!mVectorState.canReuseCache()) {
+                mVectorState.updateCachedBitmap(scaledWidth, scaledHeight);
+                mVectorState.updateCacheStates();
+            }
+        }
+        mVectorState.drawCachedBitmapWithRootAlpha(canvas, colorFilter, mTmpBounds);
         canvas.restoreToCount(saveCount);
     }
 
@@ -294,6 +339,11 @@ public class VectorDrawable extends Drawable {
     public void setColorFilter(ColorFilter colorFilter) {
         mColorFilter = colorFilter;
         invalidateSelf();
+    }
+
+    @Override
+    public ColorFilter getColorFilter() {
+        return mColorFilter;
     }
 
     @Override
@@ -340,12 +390,60 @@ public class VectorDrawable extends Drawable {
 
     @Override
     public int getIntrinsicWidth() {
-        return (int) mVectorState.mVPathRenderer.mBaseWidth;
+        return mDpiScaledWidth;
     }
 
     @Override
     public int getIntrinsicHeight() {
-        return (int) mVectorState.mVPathRenderer.mBaseHeight;
+        return mDpiScaledHeight;
+    }
+
+    /*
+     * Update the VectorDrawable dimension since the res can be in different Dpi now.
+     * Basically, when a new instance is created or getDimension() is called, we should update
+     * the current VectorDrawable's dimension information.
+     * Only after updateStateFromTypedArray() is called, we should called this and update the
+     * constant state's dpi info, i.e. updateConstantStateDensity == true.
+     */
+    void updateDimensionInfo(@Nullable Resources res, boolean updateConstantStateDensity) {
+        if (res != null) {
+            final int densityDpi = res.getDisplayMetrics().densityDpi;
+            final int targetDensity = densityDpi == 0 ? DisplayMetrics.DENSITY_DEFAULT : densityDpi;
+
+            if (updateConstantStateDensity) {
+                mVectorState.mVPathRenderer.mTargetDensity = targetDensity;
+            } else {
+                final int constantStateDensity = mVectorState.mVPathRenderer.mTargetDensity;
+                if (targetDensity != constantStateDensity && constantStateDensity != 0) {
+                    mDpiScaledWidth = Utils.scaleFromDensity(
+                            (int) mVectorState.mVPathRenderer.mBaseWidth, constantStateDensity,
+                            targetDensity);
+                    mDpiScaledHeight = Utils.scaleFromDensity(
+                            (int) mVectorState.mVPathRenderer.mBaseHeight,constantStateDensity,
+                            targetDensity);
+                    final int left = Utils.scaleFromDensity(
+                            mVectorState.mVPathRenderer.mOpticalInsets.left, constantStateDensity,
+                            targetDensity);
+                    final int right = Utils.scaleFromDensity(
+                            mVectorState.mVPathRenderer.mOpticalInsets.right, constantStateDensity,
+                            targetDensity);
+                    final int top = Utils.scaleFromDensity(
+                            mVectorState.mVPathRenderer.mOpticalInsets.top, constantStateDensity,
+                            targetDensity);
+                    final int bottom = Utils.scaleFromDensity(
+                            mVectorState.mVPathRenderer.mOpticalInsets.bottom, constantStateDensity,
+                            targetDensity);
+                    mDpiScaleInsets = Insets.of(left, top, right, bottom);
+                    return;
+                }
+            }
+        }
+        // For all the other cases, like either res is null, constant state is not initialized or
+        // target density is the same as the constant state, we will just use the constant state
+        // dimensions.
+        mDpiScaledWidth = (int) mVectorState.mVPathRenderer.mBaseWidth;
+        mDpiScaledHeight = (int) mVectorState.mVPathRenderer.mBaseHeight;
+        mDpiScaleInsets = mVectorState.mVPathRenderer.mOpticalInsets;
     }
 
     /**
@@ -383,7 +481,7 @@ public class VectorDrawable extends Drawable {
             }
 
             final String name = parser.getName();
-            if (!"vector".equals(name)) {
+            if (!SHAPE_VECTOR.equals(name)) {
                 throw new IllegalStateException("It is not vector");
             }
 
@@ -392,10 +490,11 @@ public class VectorDrawable extends Drawable {
 
             return drawable;
         } catch (XmlPullParserException e) {
-            throw new IllegalStateException("parser error", e);
+            Log.e(LOGTAG, "parser error", e);
         } catch (IOException e) {
-            throw new IllegalStateException("parser error", e);
+            Log.e(LOGTAG, "parser error", e);
         }
+        return null;
     }
 
     private static int applyAlpha(int color, float alpha) {
@@ -418,6 +517,7 @@ public class VectorDrawable extends Drawable {
         inflateInternal(context, parser, attrs);
 
         mTintFilter = Utils.updateTintFilter(this, mTintFilter, state.mTint, state.mTintMode);
+        updateDimensionInfo(context.getResources(), true /* update constant state */);
     }
 
     private void updateStateFromTypedArray(TypedArray a) throws XmlPullParserException {
@@ -425,7 +525,7 @@ public class VectorDrawable extends Drawable {
         final VPathRenderer pathRenderer = state.mVPathRenderer;
 
         // Account for any configuration changes.
-        state.mChangingConfigurations |= 0; //a.getChangingConfigurations();
+        state.mChangingConfigurations |= Utils.getChangingConfigurations(a);
 
         final int tintMode = a.getInt(R.styleable.VectorDrawable_tintMode, -1);
         if (tintMode != -1) {
@@ -436,6 +536,9 @@ public class VectorDrawable extends Drawable {
         if (tint != null) {
             state.mTint = tint;
         }
+
+        state.mAutoMirrored = a.getBoolean(
+                R.styleable.VectorDrawable_autoMirrored, state.mAutoMirrored);
 
         setAllowCaching(a.getBoolean(R.styleable.VectorDrawable_allowCaching, true));
 
@@ -464,6 +567,16 @@ public class VectorDrawable extends Drawable {
             throw new XmlPullParserException(a.getPositionDescription() +
                     "<vector> tag requires height > 0");
         }
+
+        final int insetLeft = a.getDimensionPixelSize(
+                R.styleable.VectorDrawable_opticalInsetLeft, pathRenderer.mOpticalInsets.left);
+        final int insetTop = a.getDimensionPixelSize(
+                R.styleable.VectorDrawable_opticalInsetTop, pathRenderer.mOpticalInsets.top);
+        final int insetRight = a.getDimensionPixelSize(
+                R.styleable.VectorDrawable_opticalInsetRight, pathRenderer.mOpticalInsets.right);
+        final int insetBottom = a.getDimensionPixelSize(
+                R.styleable.VectorDrawable_opticalInsetBottom, pathRenderer.mOpticalInsets.bottom);
+        pathRenderer.mOpticalInsets = Insets.of(insetLeft, insetTop, insetRight, insetBottom);
 
         final float alphaInFloat = a.getFloat(R.styleable.VectorDrawable_alpha,
                 pathRenderer.getAlpha());
@@ -567,11 +680,29 @@ public class VectorDrawable extends Drawable {
 
     @Override
     public int getChangingConfigurations() {
-        return super.getChangingConfigurations() | mVectorState.mChangingConfigurations;
+        return super.getChangingConfigurations() | mVectorState.getChangingConfigurations();
     }
 
     public void setAllowCaching(boolean allowCaching) {
         mAllowCaching = allowCaching;
+    }
+
+    private boolean needMirroring() {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && isAutoMirrored() &&
+                getLayoutDirection() == LayoutDirection.RTL;
+    }
+
+    @Override
+    public void setAutoMirrored(boolean mirrored) {
+        if (mVectorState.mAutoMirrored != mirrored) {
+            mVectorState.mAutoMirrored = mirrored;
+            invalidateSelf();
+        }
+    }
+
+    @Override
+    public boolean isAutoMirrored() {
+        return mVectorState.mAutoMirrored;
     }
 
     private static class VectorDrawableState extends ConstantState {
@@ -579,13 +710,14 @@ public class VectorDrawable extends Drawable {
         VPathRenderer mVPathRenderer;
         ColorStateList mTint = null;
         Mode mTintMode = DEFAULT_TINT_MODE;
+        boolean mAutoMirrored;
 
         Bitmap mCachedBitmap;
         ColorStateList mCachedTint;
         Mode mCachedTintMode;
         int mCachedRootAlpha;
+        boolean mCachedAutoMirrored;
         boolean mCacheDirty;
-
         /** Temporary paint object used to draw cached bitmaps. */
         Paint mTempPaint;
 
@@ -602,13 +734,15 @@ public class VectorDrawable extends Drawable {
                 }
                 mTint = copy.mTint;
                 mTintMode = copy.mTintMode;
+                mAutoMirrored = copy.mAutoMirrored;
             }
         }
 
-        public void drawCachedBitmapWithRootAlpha(Canvas canvas, ColorFilter filter) {
+        public void drawCachedBitmapWithRootAlpha(Canvas canvas, ColorFilter filter,
+                Rect originalBounds) {
             // The bitmap's size is the same as the bounds.
             final Paint p = getPaint(filter);
-            canvas.drawBitmap(mCachedBitmap, 0, 0, p);
+            canvas.drawBitmap(mCachedBitmap, null, originalBounds, p);
         }
 
         public boolean hasTranslucentRoot() {
@@ -632,16 +766,15 @@ public class VectorDrawable extends Drawable {
             return mTempPaint;
         }
 
-        public void updateCachedBitmap(Rect bounds) {
+        public void updateCachedBitmap(int width, int height) {
             mCachedBitmap.eraseColor(Color.TRANSPARENT);
             Canvas tmpCanvas = new Canvas(mCachedBitmap);
-            mVPathRenderer.draw(tmpCanvas, bounds.width(), bounds.height(), null);
+            mVPathRenderer.draw(tmpCanvas, width, height, null);
         }
 
-        public void createCachedBitmapIfNeeded(Rect bounds) {
-            if (mCachedBitmap == null || !canReuseBitmap(bounds.width(),
-                    bounds.height())) {
-                mCachedBitmap = Bitmap.createBitmap(bounds.width(), bounds.height(),
+        public void createCachedBitmapIfNeeded(int width, int height) {
+            if (mCachedBitmap == null || !canReuseBitmap(width, height)) {
+                mCachedBitmap = Bitmap.createBitmap(width, height,
                         Bitmap.Config.ARGB_8888);
                 mCacheDirty = true;
             }
@@ -660,6 +793,7 @@ public class VectorDrawable extends Drawable {
             if (!mCacheDirty
                     && mCachedTint == mTint
                     && mCachedTintMode == mTintMode
+                    && mCachedAutoMirrored == mAutoMirrored
                     && mCachedRootAlpha == mVPathRenderer.getRootAlpha()) {
                 return true;
             }
@@ -672,6 +806,7 @@ public class VectorDrawable extends Drawable {
             mCachedTint = mTint;
             mCachedTintMode = mTintMode;
             mCachedRootAlpha = mVPathRenderer.getRootAlpha();
+            mCachedAutoMirrored = mAutoMirrored;
             mCacheDirty = false;
         }
 
@@ -679,21 +814,20 @@ public class VectorDrawable extends Drawable {
             mVPathRenderer = new VPathRenderer();
         }
 
-        @NonNull
         @Override
         public Drawable newDrawable() {
-            return new VectorDrawable(this);
+            return new VectorDrawable(this, null);
         }
 
-        @NonNull
         @Override
         public Drawable newDrawable(Resources res) {
-            return new VectorDrawable(this);
+            return new VectorDrawable(this, res);
         }
 
         @Override
         public int getChangingConfigurations() {
-            return mChangingConfigurations;
+            return mChangingConfigurations
+                    | (mTint != null ? Utils.getChangingConfigurations(mTint) : 0);
         }
     }
 
@@ -728,8 +862,11 @@ public class VectorDrawable extends Drawable {
         float mBaseHeight = 0;
         float mViewportWidth = 0;
         float mViewportHeight = 0;
+        Insets mOpticalInsets = Insets.NONE;
         int mRootAlpha = 0xFF;
         String mRootName = null;
+
+        int mTargetDensity = DisplayMetrics.DENSITY_DEFAULT;
 
         final ArrayMap<String, Object> mVGTargetsMap = new ArrayMap<>();
 
@@ -766,9 +903,11 @@ public class VectorDrawable extends Drawable {
             mBaseHeight = copy.mBaseHeight;
             mViewportWidth = copy.mViewportWidth;
             mViewportHeight = copy.mViewportHeight;
+            mOpticalInsets = copy.mOpticalInsets;
             mChangingConfigurations = copy.mChangingConfigurations;
             mRootAlpha = copy.mRootAlpha;
             mRootName = copy.mRootName;
+            mTargetDensity = copy.mTargetDensity;
             if (copy.mRootName != null) {
                 mVGTargetsMap.put(copy.mRootName, this);
             }
@@ -781,9 +920,10 @@ public class VectorDrawable extends Drawable {
             // Basically the Mfinal = Mviewport * M0 * M1 * M2;
             // Mi the local matrix at level i of the group tree.
             currentGroup.mStackedMatrix.set(currentMatrix);
-
             currentGroup.mStackedMatrix.preConcat(currentGroup.mLocalMatrix);
 
+            // Save the current clip information, which is local to this group.
+            canvas.save();
             // Draw the group tree in the same order as the XML file.
             for (int i = 0; i < currentGroup.mChildren.size(); i++) {
                 Object child = currentGroup.mChildren.get(i);
@@ -796,6 +936,7 @@ public class VectorDrawable extends Drawable {
                     drawPath(currentGroup, childPath, canvas, w, h, filter);
                 }
             }
+            canvas.restore();
         }
 
         public void draw(Canvas canvas, int w, int h, ColorFilter filter) {
@@ -808,10 +949,16 @@ public class VectorDrawable extends Drawable {
             final float scaleX = w / mViewportWidth;
             final float scaleY = h / mViewportHeight;
             final float minScale = Math.min(scaleX, scaleY);
+            final Matrix groupStackedMatrix = vGroup.mStackedMatrix;
 
-            mFinalPathMatrix.set(vGroup.mStackedMatrix);
+            mFinalPathMatrix.set(groupStackedMatrix);
             mFinalPathMatrix.postScale(scaleX, scaleY);
 
+            final float matrixScale = getMatrixScale(groupStackedMatrix);
+            if (matrixScale == 0) {
+                // When either x or y is scaled to 0, we don't need to draw anything.
+                return;
+            }
             vPath.toPath(mPath);
             final Path path = mPath;
 
@@ -819,7 +966,7 @@ public class VectorDrawable extends Drawable {
 
             if (vPath.isClipPath()) {
                 mRenderPath.addPath(path, mFinalPathMatrix);
-                canvas.clipPath(mRenderPath, Region.Op.REPLACE);
+                canvas.clipPath(mRenderPath);
             } else {
                 VFullPath fullPath = (VFullPath) vPath;
                 if (fullPath.mTrimPathStart != 0.0f || fullPath.mTrimPathEnd != 1.0f) {
@@ -877,10 +1024,40 @@ public class VectorDrawable extends Drawable {
                     strokePaint.setStrokeMiter(fullPath.mStrokeMiterlimit);
                     strokePaint.setColor(applyAlpha(fullPath.mStrokeColor, fullPath.mStrokeAlpha));
                     strokePaint.setColorFilter(filter);
-                    strokePaint.setStrokeWidth(fullPath.mStrokeWidth * minScale);
+                    final float finalStrokeScale = minScale * matrixScale;
+                    strokePaint.setStrokeWidth(fullPath.mStrokeWidth * finalStrokeScale);
                     canvas.drawPath(mRenderPath, strokePaint);
                 }
             }
+        }
+
+        private float getMatrixScale(Matrix groupStackedMatrix) {
+            // Given unit vectors A = (0, 1) and B = (1, 0).
+            // After matrix mapping, we got A' and B'. Let theta = the angel b/t A' and B'.
+            // Therefore, the final scale we want is min(|A'| * sin(theta), |B'| * sin(theta)),
+            // which is (|A'| * |B'| * sin(theta)) / max (|A'|, |B'|);
+            // If  max (|A'|, |B'|) = 0, that means either x or y has a scale of 0.
+            //
+            // For non-skew case, which is most of the cases, matrix scale is computing exactly the
+            // scale on x and y axis, and take the minimal of these two.
+            // For skew case, an unit square will mapped to a parallelogram. And this function will
+            // return the minimal height of the 2 bases.
+            float[] unitVectors = new float[] {0, 1, 1, 0};
+            groupStackedMatrix.mapVectors(unitVectors);
+            float scaleX = MathUtils.mag(unitVectors[0], unitVectors[1]);
+            float scaleY = MathUtils.mag(unitVectors[2], unitVectors[3]);
+            float crossProduct = MathUtils.cross(unitVectors[0], unitVectors[1],
+                    unitVectors[2], unitVectors[3]);
+            float maxScale = MathUtils.max(scaleX, scaleY);
+
+            float matrixScale = 0;
+            if (maxScale > 0) {
+                matrixScale = MathUtils.abs(crossProduct) / maxScale;
+            }
+            if (DBG_VECTOR_DRAWABLE) {
+                Log.d(LOGTAG, "Scale x " + scaleX + " y " + scaleY + " final " + matrixScale);
+            }
+            return matrixScale;
         }
     }
 
@@ -891,7 +1068,7 @@ public class VectorDrawable extends Drawable {
 
         /////////////////////////////////////////////////////
         // Variables below need to be copied (deep copy if applicable) for mutation.
-        final ArrayList<Object> mChildren = new ArrayList<>();
+        final ArrayList<Object> mChildren = new ArrayList<Object>();
 
         private float mRotate = 0;
         private float mPivotX = 0;
@@ -930,7 +1107,7 @@ public class VectorDrawable extends Drawable {
                     VGroup copyGroup = (VGroup) copyChild;
                     mChildren.add(new VGroup(copyGroup, targetsMap));
                 } else {
-                    VPath newPath;
+                    VPath newPath = null;
                     if (copyChild instanceof VFullPath) {
                         newPath = new VFullPath((VFullPath) copyChild);
                     } else if (copyChild instanceof VClipPath) {
@@ -966,7 +1143,7 @@ public class VectorDrawable extends Drawable {
 
         private void updateStateFromTypedArray(TypedArray a) {
             // Account for any configuration changes.
-            mChangingConfigurations |= 0; //a.getChangingConfigurations();
+            mChangingConfigurations |= Utils.getChangingConfigurations(a);
 
             mRotate = a.getFloat(R.styleable.VectorDrawableGroup_rotation, mRotate);
             mPivotX = a.getFloat(R.styleable.VectorDrawableGroup_pivotX, mPivotX);
@@ -1158,7 +1335,7 @@ public class VectorDrawable extends Drawable {
 
         private void updateStateFromTypedArray(TypedArray a) {
             // Account for any configuration changes.
-            mChangingConfigurations |= 0; //a.getChangingConfigurations();
+            mChangingConfigurations |= Utils.getChangingConfigurations(a);
 
             final String pathName = a.getString(R.styleable.VectorDrawableClipPath_name);
             if (pathName != null) {
@@ -1254,7 +1431,7 @@ public class VectorDrawable extends Drawable {
 
         private void updateStateFromTypedArray(TypedArray a) {
             // Account for any configuration changes.
-            mChangingConfigurations |= 0; //a.getChangingConfigurations();
+            mChangingConfigurations |= Utils.getChangingConfigurations(a);
 
             final String pathName = a.getString(R.styleable.VectorDrawablePath_name);
             if (pathName != null) {

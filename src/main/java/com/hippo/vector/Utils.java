@@ -17,12 +17,21 @@
 package com.hippo.vector;
 
 import android.content.res.ColorStateList;
+import android.content.res.TypedArray;
 import android.graphics.Color;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.drawable.Drawable;
+import android.os.Build;
 
 public class Utils {
+
+    /**
+     * Indicates that the bitmap was created for an unknown pixel density.
+     *
+     * @see Utils#scaleFromDensity(int, int, int)
+     */
+    public static final int DENSITY_NONE = 0;
 
     /**
      * Ensures the tint filter is consistent with the current tint color and
@@ -51,6 +60,31 @@ public class Utils {
             case 15: return PorterDuff.Mode.SCREEN;
             case 16: return PorterDuff.Mode.ADD;
             default: return defaultMode;
+        }
+    }
+
+    public static int scaleFromDensity(int size, int sdensity, int tdensity) {
+        if (sdensity == DENSITY_NONE || tdensity == DENSITY_NONE || sdensity == tdensity) {
+            return size;
+        }
+
+        // Scale by tdensity / sdensity, rounding up.
+        return ((size * tdensity) + (sdensity >> 1)) / sdensity;
+    }
+
+    public static int getChangingConfigurations(TypedArray a) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            return a.getChangingConfigurations();
+        } else {
+            return 0;
+        }
+    }
+
+    public static int getChangingConfigurations(ColorStateList colorStateList) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            return colorStateList.getChangingConfigurations();
+        } else {
+            return 0;
         }
     }
 }
