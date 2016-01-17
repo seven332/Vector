@@ -24,7 +24,7 @@ import android.graphics.PorterDuffColorFilter;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 
-public class Utils {
+class Utils {
 
     /**
      * Indicates that the bitmap was created for an unknown pixel density.

@@ -22,7 +22,7 @@ import android.util.Log;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-public class PathParser {
+class PathParser {
     static final String LOGTAG = PathParser.class.getSimpleName();
 
     /**

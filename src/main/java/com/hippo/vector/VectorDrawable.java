@@ -254,6 +254,10 @@ public class VectorDrawable extends Drawable {
         return this;
     }
 
+    public void clearMutated() {
+        mMutated = false;
+    }
+
     public Object getTargetByName(String name) {
         return mVectorState.mVPathRenderer.mVGTargetsMap.get(name);
     }
@@ -396,6 +400,10 @@ public class VectorDrawable extends Drawable {
     @Override
     public int getIntrinsicHeight() {
         return mDpiScaledHeight;
+    }
+
+    public Insets getOpticalInsets() {
+        return mDpiScaleInsets;
     }
 
     /*
