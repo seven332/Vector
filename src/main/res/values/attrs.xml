@@ -119,7 +119,7 @@
              and 1 (completely opaque)-->
         <attr name="fillAlpha" format="float"/>
         <!-- The specification of the operations that define the path  -->
-        <attr name="pathData" format="string"/>
+        <attr name="pathData"/>
         <!-- The fraction of the path to trim from the start from 0 to 1 -->
         <attr name="trimPathStart" format="float"/>
         <!-- The fraction of the path to trim from the end from 0 to 1  -->
@@ -162,108 +162,6 @@
         <attr name="name" />
         <!-- The animation for the target path, group or vector drawable -->
         <attr name="animation" format="reference" />
-    </declare-styleable>
-
-    <declare-styleable name="Animator">
-        <!-- Defines the interpolator used to smooth the animation movement in time. -->
-        <attr name="interpolator" format="reference" />
-        <!-- Amount of time (in milliseconds) for the animation to run. -->
-        <attr name="duration" format="integer" />
-        <!-- Delay in milliseconds before the animation runs, once start time is reached. -->
-        <attr name="startOffset" format="integer" />
-        <!-- Defines how many times the animation should repeat. The default value is 0. -->
-        <attr name="repeatCount" format="integer">
-            <enum name="infinite" value="-1" />
-        </attr>
-        <!-- Defines the animation behavior when it reaches the end and the repeat count is
-             greater than 0 or infinite. The default value is restart. -->
-        <attr name="repeatMode">
-            <!-- The animation starts again from the beginning. -->
-            <enum name="restart" value="1" />
-            <!-- The animation plays backward. -->
-            <enum name="reverse" value="2" />
-        </attr>
-        <!-- Value the animation starts from. -->
-        <attr name="valueFrom" format="float|integer|color|dimension|string"/>
-        <!-- Value the animation animates to. -->
-        <attr name="valueTo" format="float|integer|color|dimension|string"/>
-        <!-- The type of valueFrom and valueTo. -->
-        <attr name="valueType">
-            <!-- The given values are floats. This is the default value if valueType is
-                 unspecified. Note that if any value attribute has a color value
-                 (beginning with "#"), then this attribute is ignored and the color values are
-                 interpreted as integers. -->
-            <enum name="floatType" value="0" />
-            <!-- values are integers. -->
-            <enum name="intType"   value="1" />
-            <!-- values are paths defined as strings.
-                 This type is used for path morphing in AnimatedVectorDrawable. -->
-            <enum name="pathType"   value="2" />
-            <!-- values are colors, which are integers starting with "#". -->
-            <enum name="colorType"   value="3" />
-        </attr>
-        <!-- Placeholder for a deleted attribute. This should be removed before M release. -->
-        <attr name="removeBeforeMRelease" format="integer" />
-    </declare-styleable>
-
-    <declare-styleable name="PropertyAnimator">
-        <!-- Name of the property being animated. -->
-        <attr name="propertyName" format="string"/>
-        <!-- Name of the property being animated as the X coordinate of the pathData. -->
-        <attr name="propertyXName" format="string"/>
-        <!-- Name of the property being animated as the Y coordinate of the pathData. -->
-        <attr name="propertyYName" format="string"/>
-        <!-- The path used to animate the properties in the ObjectAnimator -->
-        <!--
-        <attr name="pathData"/>
-        -->
-    </declare-styleable>
-
-    <declare-styleable name="AnimatorSet">
-        <!-- Name of the property being animated. -->
-        <attr name="ordering">
-            <!-- child animations should be played together. -->
-            <enum name="together" value="0" />
-            <!-- child animations should be played sequentially, in the same order as the xml. -->
-            <enum name="sequentially" value="1" />
-        </attr>
-    </declare-styleable>
-
-    <!--
-    <declare-styleable name="PropertyValuesHolder">
-        <attr name="valueType" />
-        <attr name="propertyName" />
-        <attr name="valueFrom" />
-        <attr name="valueTo" />
-    </declare-styleable>
-    -->
-
-    <!--
-    <declare-styleable name="Keyframe">
-        <attr name="valueType" />
-        <attr name="value" />
-        <attr name="fraction" format="float" />
-    -->
-        <!-- Defines a per-interval interpolator for this keyframe. This interpolator will be used
-             to interpolate between this keyframe and the previous keyframe.-->
-    <!--
-        <attr name="interpolator" />
-    </declare-styleable>
-    -->
-
-    <declare-styleable name="PathInterpolator">
-        <!-- The x coordinate of the first control point of the cubic Bezier -->
-        <attr name="controlX1" format="float" />
-        <!-- The y coordinate of the first control point of the cubic Bezier -->
-        <attr name="controlY1" format="float" />
-        <!-- The x coordinate of the second control point of the cubic Bezier -->
-        <attr name="controlX2" format="float" />
-        <!-- The y coordinate of the second control point of the cubic Bezier -->
-        <attr name="controlY2" format="float" />
-        <!-- The control points defined as a path.
-             When pathData is defined, then both of the control points of the
-             cubic Bezier will be ignored. -->
-        <attr name="pathData"/>
     </declare-styleable>
 
 </resources>

@@ -42,6 +42,7 @@ import android.util.LayoutDirection;
 import android.util.Log;
 import android.util.Xml;
 
+import com.hippo.anani.PathParser;
 import com.hippo.yorozuya.MathUtils;
 
 import org.xmlpull.v1.XmlPullParser;

@@ -34,6 +34,9 @@ import android.support.v4.util.ArrayMap;
 import android.util.AttributeSet;
 import android.util.Log;
 
+import com.hippo.anani.Animatable2;
+import com.hippo.anani.AnimatorInflater;
+
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 
