@@ -270,6 +270,7 @@ public class VectorDrawable extends Drawable {
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     public void draw(Canvas canvas) {
         // We will offset the bounds for drawBitmap, so copyBounds() here instead
         // of getBounds().
@@ -606,7 +607,7 @@ public class VectorDrawable extends Drawable {
 
         // Use a stack to help to build the group tree.
         // The top of the stack is always the current group.
-        final Stack<VGroup> groupStack = new Stack<VGroup>();
+        final Stack<VGroup> groupStack = new Stack<>();
         groupStack.push(pathRenderer.mRootGroup);
 
         int eventType = parser.getEventType();
@@ -658,7 +659,7 @@ public class VectorDrawable extends Drawable {
         }
 
         if (noPathTag) {
-            final StringBuffer tag = new StringBuffer();
+            final StringBuilder tag = new StringBuilder();
 
             if (tag.length() > 0) {
                 tag.append(" or ");
@@ -1077,7 +1078,7 @@ public class VectorDrawable extends Drawable {
 
         /////////////////////////////////////////////////////
         // Variables below need to be copied (deep copy if applicable) for mutation.
-        final ArrayList<Object> mChildren = new ArrayList<Object>();
+        final ArrayList<Object> mChildren = new ArrayList<>();
 
         private float mRotate = 0;
         private float mPivotX = 0;
@@ -1116,7 +1117,7 @@ public class VectorDrawable extends Drawable {
                     VGroup copyGroup = (VGroup) copyChild;
                     mChildren.add(new VGroup(copyGroup, targetsMap));
                 } else {
-                    VPath newPath = null;
+                    VPath newPath;
                     if (copyChild instanceof VFullPath) {
                         newPath = new VFullPath((VFullPath) copyChild);
                     } else if (copyChild instanceof VClipPath) {
