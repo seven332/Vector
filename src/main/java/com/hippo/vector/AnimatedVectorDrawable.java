@@ -33,6 +33,7 @@ import android.support.annotation.NonNull;
 import android.support.v4.util.ArrayMap;
 import android.util.AttributeSet;
 import android.util.Log;
+import android.util.Xml;
 
 import com.hippo.anani.Animatable2;
 import com.hippo.anani.AnimatorInflater;
@@ -292,6 +293,36 @@ public class AnimatedVectorDrawable extends Drawable implements Animatable2 {
 
     public Insets getOpticalInsets() {
         return mAnimatedVectorState.mVectorDrawable.getOpticalInsets();
+    }
+
+    public static AnimatedVectorDrawable create(Context context, int rid) {
+        try {
+            final XmlPullParser parser = context.getResources().getXml(rid);
+            final AttributeSet attrs = Xml.asAttributeSet(parser);
+            int type;
+            while ((type=parser.next()) != XmlPullParser.START_TAG &&
+                    type != XmlPullParser.END_DOCUMENT) {
+                // Empty loop
+            }
+            if (type != XmlPullParser.START_TAG) {
+                throw new XmlPullParserException("No start tag found");
+            }
+
+            final String name = parser.getName();
+            if (!ANIMATED_VECTOR.equals(name)) {
+                throw new IllegalStateException("It is not animated-vector");
+            }
+
+            final AnimatedVectorDrawable drawable = new AnimatedVectorDrawable();
+            drawable.inflate(context, parser, attrs);
+
+            return drawable;
+        } catch (XmlPullParserException e) {
+            Log.e(LOGTAG, "parser error", e);
+        } catch (IOException e) {
+            Log.e(LOGTAG, "parser error", e);
+        }
+        return null;
     }
 
     public void inflate(Context context, XmlPullParser parser, AttributeSet attrs)
